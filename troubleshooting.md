@@ -56,7 +56,7 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
     returned the JSON health response ({"instance_id":"app-01","status":"alive",...}), 
     no longer "Connection refused".
   - After also fixing Entry 5, `curl http://127.0.0.1:8080/` returns 200 OK.
-- Related commit: (fill after commit)
+- Related commit: d62930b
 - Remaining uncertainty: none.
 
 ## Entry 3 — 2026-09-21 14:55 — restart policy set to "no"
