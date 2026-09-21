@@ -355,11 +355,19 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   - Conclusion: the named volume points at a directory Postgres does 
     not use for data. The real data directory is on tmpfs (ephemeral).
 - Failed attempt and what changed your thinking: none yet
-- Root cause: (pending)
-- Fix: (pending)
-- Retest evidence: (pending)
-- Related commit: (pending)
-- Remaining uncertainty: none — the mount path is visibly wrong.
+- Root cause: The named volume postgres-data was mounted to 
+  /var/lib/postgresql/backup, a directory Postgres does not use for its 
+  data. The real data directory (/var/lib/postgresql/data) was mounted as 
+  tmpfs, so Postgres never wrote to the named volume.
+- Fix: Changed the volume mount in docker-compose.yml from 
+  /var/lib/postgresql/backup to /var/lib/postgresql/data.
+- Retest evidence: After recreating postgres with the new mount and 
+  creating a record via POST /records, force-recreating the postgres 
+  container (docker compose up -d --force-recreate postgres) left the 
+  record intact. GET /records after recreation still returned id 1, 2, 3 
+  including the newly created "Persist me".
+- Related commit: (fill after commit)
+- Remaining uncertainty: none — persistence verified.
 
 
 ## Entry 17 — 2026-09-21 17:17 — Postgres data directory on tmpfs (no persistence)
@@ -370,10 +378,15 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
 - Command or test: Read postgres service block in docker-compose.yml.
 - Actual output: `tmpfs: [/var/lib/postgresql/data]`
 - Failed attempt and what changed your thinking: none yet
-- Root cause: (pending)
-- Fix: (pending)
-- Retest evidence: (pending)
-- Related commit: (pending)
+- Root cause: docker-compose.yml set tmpfs: [/var/lib/postgresql/data], 
+  making Postgres's data directory memory-backed. Data was lost whenever 
+  the container stopped or was removed.
+- Fix: Removed the tmpfs line entirely. Postgres data now goes to disk 
+  (via the named volume mounted at /var/lib/postgresql/data — see Entry 16).
+- Retest evidence: Same test as Entry 16. Records and Redis counter both 
+  survived a force-recreate of postgres and redis. If tmpfs were still in 
+  place, the records would have been lost.
+- Related commit: (same as Entry 16 — one commit fixes both)
 - Remaining uncertainty: none.
 
 
@@ -403,13 +416,19 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   - command: ["redis-server", "--save", "", "--appendonly", "no"]
   - no volumes: section
 - Failed attempt and what changed your thinking: none yet
-- Root cause: (pending)
-- Fix: (pending)
-- Retest evidence: (pending)
-- Related commit: (pending)
-- Remaining uncertainty: Need to confirm the task requires Redis 
-  persistence to survive container recreation. Task says "Configure 
-  Redis persistence where appropriate" — likely yes.
+- Root cause: The redis command disabled both RDB and AOF 
+  ("--save", "", "--appendonly", "no"), and the service had no volume 
+  mounted. Even if persistence had been enabled, /data was inside the 
+  container and would be lost on container removal.
+- Fix: Changed the command to ["redis-server", "--appendonly", "yes", 
+  "--appendfsync", "everysec"] and added a redis-data:/data volume mount. 
+  Declared redis-data: under the top-level volumes: block.
+- Retest evidence: Bumped the counter three times (values 1, 2, 3, then 4 
+  after the create-record call). Force-recreated the redis container 
+  (docker compose up -d --force-recreate redis). Next counter call returned 
+  5 (not reset to 1), proving the Redis counter survived container recreation.
+- Related commit: (same commit as 16 and 17)
+- Remaining uncertainty: none — persistence verified.
 
 
 ## Entry 20 — 2026-09-21 17:40 — nginx, postgres, redis have no restart policies
