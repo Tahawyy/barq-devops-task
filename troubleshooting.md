@@ -366,7 +366,7 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   container (docker compose up -d --force-recreate postgres) left the 
   record intact. GET /records after recreation still returned id 1, 2, 3 
   including the newly created "Persist me".
-- Related commit: (fill after commit)
+- Related commit: 98fee21
 - Remaining uncertainty: none — persistence verified.
 
 
@@ -386,7 +386,7 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
 - Retest evidence: Same test as Entry 16. Records and Redis counter both 
   survived a force-recreate of postgres and redis. If tmpfs were still in 
   place, the records would have been lost.
-- Related commit: (same as Entry 16 — one commit fixes both)
+- Related commit: 98fee21
 - Remaining uncertainty: none.
 
 
@@ -427,7 +427,7 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   after the create-record call). Force-recreated the redis container 
   (docker compose up -d --force-recreate redis). Next counter call returned 
   5 (not reset to 1), proving the Redis counter survived container recreation.
-- Related commit: (same commit as 16 and 17)
+- Related commit: 98fee21
 - Remaining uncertainty: none — persistence verified.
 
 
