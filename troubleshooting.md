@@ -104,13 +104,20 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
 - docker-compose.yml x-app anchor: `APP_PORT: "8080"` (inherited by both apps)
 - Conclusion: app-01 does not listen on 8081; NGINX will fail to reach it.
 - Failed attempt and what changed your thinking: none yet
-- Root cause: (pending)
-- Fix: (pending)
-- Retest evidence: (pending)
-- Related commit: (pending)
-- Remaining uncertainty: Not yet verified at runtime because the request 
-  path fails earlier (Entry 6 blocks reaching nginx; Entry 2 blocks nginx 
-  reaching apps). Will be verified after Entries 2 and 6 are fixed.
+- Root cause: nginx/nginx.conf listed app-01 in the upstream on port 8081, 
+  but app-01 listens on APP_PORT 8080 (from the x-app anchor). Nothing 
+  was listening on 8081, so every request routed to app-01 got 
+  "connect() failed (111: Connection refused)" and returned 502.
+- Fix: Changed nginx/nginx.conf upstream from `server app-01:8081` to 
+  `server app-01:8080`. Recreated nginx with 
+  `docker compose -p barq-assessment up -d --force-recreate nginx`.
+- Retest evidence:
+  - Before: `for i in 1..5; curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/`
+    → 502 502 502 502 502
+  - After: same loop → 200 200 200 200 200
+  - nginx logs no longer show `connect() failed ... 8081`.
+- Related commit: (fill after commit)
+- Remaining uncertainty: none.
 
 ## Entry 6 — 2026-09-21 15:18 — NGINX container port mismatch (host:8080 -> container:81 vs listen 80)
 - Symptom: Requests to `http://127.0.0.1:8080` never reach NGINX because 
