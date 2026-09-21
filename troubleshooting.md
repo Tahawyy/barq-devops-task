@@ -116,7 +116,7 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
     → 502 502 502 502 502
   - After: same loop → 200 200 200 200 200
   - nginx logs no longer show `connect() failed ... 8081`.
-- Related commit: (fill after commit)
+- Related commit: b0060d1
 - Remaining uncertainty: none.
 
 ## Entry 6 — 2026-09-21 15:18 — NGINX container port mismatch (host:8080 -> container:81 vs listen 80)
