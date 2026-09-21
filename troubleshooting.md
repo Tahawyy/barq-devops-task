@@ -219,7 +219,7 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
 - Retest evidence:
   - `docker exec app-01 python -c "socket.create_connection(('postgres',5432))"` → OK (before fix; this was the runtime confirmation)
   - After fix + Entry 21: `curl /ready` reports `"postgres": "ready"`.
-- Related commit: (same as Entry 10 / 21)
+- Related commit: e5784d6
 - Remaining uncertainty: none.
 
 ## Entry 10 — 2026-09-21 16:00 — REDIS_URL uses port 6380, Redis listens on 6379
@@ -240,7 +240,7 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
 - Retest evidence:
   - `docker exec app-01 python -c "socket.create_connection(('redis',6379))"` → OK (before fix)
   - After fix: `curl /counter` returns `{"counter":1}`; `/ready` reports `"redis": "ready"`.
-- Related commit: (same as Entry 9 / 21)
+- Related commit: e5784d6
 - Remaining uncertainty: none.
 
 ## Entry 11 — 2026-09-21 16:10 — config/app.env tracked in git, contains credential-like value
@@ -461,5 +461,5 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   - `curl -s http://127.0.0.1:8080/ready` → {"status":"ready", "dependencies": {"postgres":"ready","redis":"ready"}, ...}
   - `curl -s http://127.0.0.1:8080/records` → returns the 2 seeded records
   - `curl -i -X POST -H 'Content-Type: application/json' -d '{"title":"Persistence test"}' http://127.0.0.1:8080/records` → 201 CREATED, record id 3
-- Related commit: (fill after commit)
+- Related commit: e5784d6
 - Remaining uncertainty: none — Postgres now authenticates and serves reads/writes.
