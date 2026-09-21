@@ -45,11 +45,19 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   - From inside app-01: `docker exec app-01 python -c "... urlopen('http://127.0.0.1:8080/health')"` → 200
   - From inside nginx: `docker exec nginx wget -q -O- http://app-01:8080/health` → "can't connect to remote host (172.18.0.2): Connection refused"
 - Failed attempt and what changed your thinking: none yet
-- Root cause: (pending)
-- Fix: (pending)
-- Retest evidence: (pending)
-- Related commit: (pending)
-- Remaining uncertainty: none — confirmed at runtime that the app is reachable only inside its own container.
+- Root cause: docker-compose.yml overrides the Flask app's safe default 
+  (0.0.0.0 from app/server.py line 144) with APP_HOST: "127.0.0.1", 
+  forcing the app to bind only to its container's loopback interface. 
+  NGINX, running in a different container, cannot reach it.
+- Fix: Changed APP_HOST in the x-app anchor from "127.0.0.1" to "0.0.0.0". 
+  Recreated app-01 and app-02 with `docker compose -p barq-assessment up -d app-01 app-02`.
+- Retest evidence:
+  - `docker exec nginx wget -q -O- http://app-01:8080/health` → 
+    returned the JSON health response ({"instance_id":"app-01","status":"alive",...}), 
+    no longer "Connection refused".
+  - After also fixing Entry 5, `curl http://127.0.0.1:8080/` returns 200 OK.
+- Related commit: (fill after commit)
+- Remaining uncertainty: none.
 
 ## Entry 3 — 2026-09-21 14:55 — restart policy set to "no"
 - Symptom: App containers will not restart if they crash, violating the task's requirement for correct restart policies.
