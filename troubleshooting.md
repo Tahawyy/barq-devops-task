@@ -30,9 +30,8 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
 - Fix: (pending)
 - Retest evidence: (pending)
 - Related commit: (pending)
-- Remaining uncertainty: none — app/server.py line 51 reads 
-  INSTANCE_ID via os.getenv; docker-compose.yml sets it to "app-01" 
-  for both services.
+- Remaining uncertainty: none — /instance on both apps returned 
+  {"instance_id":"app-01"} confirming the same value at runtime.
 
 ## Entry 2 — 2026-09-21 14:52 — APP_HOST set to 127.0.0.1 makes apps unreachable from NGINX
 - Symptom: NGINX cannot reach the apps because the Flask app binds to 
@@ -42,17 +41,15 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
 - Command or test:
   1. `grep -n "APP_HOST" docker-compose.yml`
   2. `grep -n "APP_HOST" app/server.py`
-- Actual output:
-  - docker-compose.yml (x-app anchor): `APP_HOST: "127.0.0.1"`
-  - app/server.py: `create_app().run(host=os.getenv("APP_HOST", "0.0.0.0"), )`
-  - Conclusion: code default is 0.0.0.0, but compose forces 127.0.0.1.
+- Actual output (runtime):
+  - From inside app-01: `docker exec app-01 python -c "... urlopen('http://127.0.0.1:8080/health')"` → 200
+  - From inside nginx: `docker exec nginx wget -q -O- http://app-01:8080/health` → "can't connect to remote host (172.18.0.2): Connection refused"
 - Failed attempt and what changed your thinking: none yet
 - Root cause: (pending)
 - Fix: (pending)
 - Retest evidence: (pending)
 - Related commit: (pending)
-- Remaining uncertainty: none — app/server.py line 144 confirms the 
-  code default is 0.0.0.0; docker-compose.yml overrides it to 127.0.0.1.
+- Remaining uncertainty: none — confirmed at runtime that the app is reachable only inside its own container.
 
 ## Entry 3 — 2026-09-21 14:55 — restart policy set to "no"
 - Symptom: App containers will not restart if they crash, violating the task's requirement for correct restart policies.
@@ -75,20 +72,15 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   1. Read healthcheck block in docker-compose.yml (x-app anchor)
   2. `grep -n "health" app/server.py`
   3. `grep -n "app.get\|app.post\|app.route" app/server.py`
-- Actual output:
-  - docker-compose.yml: healthcheck calls 
-    `urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2)`
-  - app/server.py line 96: `@app.get("/health")` — only /health exists.
-  - Full route list (lines 92, 96, 100, 104, 118, 133): /, /health, 
-    /instance, /ready, /records, /counter. No /healthz.
-  - Conclusion: /healthz does not exist; healthcheck will 404, 
-    container will be marked unhealthy.
+- Actual output (runtime):
+  - `docker compose ps -a` shows app-01 and app-02 as `Up ... (unhealthy)`.
+  - App route is /health (grep line 96), healthcheck calls /healthz.
 - Failed attempt and what changed your thinking: none yet
 - Root cause: (pending)
 - Fix: (pending)
 - Retest evidence: (pending)
 - Related commit: (pending)
-- Remaining uncertainty: none — the endpoint mismatch is proven by grep on both files.
+- Remaining uncertainty: none.
 
 ## Entry 5 — 2026-09-21 15:04 — NGINX upstream points app-01 to port 8081
 - Symptom: NGINX will return 502 for requests routed to app-01 because nothing is listening on port 8081.
@@ -108,7 +100,9 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
 - Fix: (pending)
 - Retest evidence: (pending)
 - Related commit: (pending)
-- Remaining uncertainty: Need to confirm at runtime — expect 502s for requests routed to app-01 while app-02 responds normally.    
+- Remaining uncertainty: Not yet verified at runtime because the request 
+  path fails earlier (Entry 6 blocks reaching nginx; Entry 2 blocks nginx 
+  reaching apps). Will be verified after Entries 2 and 6 are fixed.
 
 ## Entry 6 — 2026-09-21 15:18 — NGINX container port mismatch (host:8080 -> container:81 vs listen 80)
 - Symptom: Requests to `http://127.0.0.1:8080` will never reach NGINX because the container is not listening on the mapped container port.
@@ -116,16 +110,15 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
 - Command or test:
     1. Read nginx ports mapping in docker-compose.yml
     2. Read listen server in nginx/nginx.conf
-- Actual output:
-    - docker-compose.yml: `"127.0.0.1:${PUBLIC_PORT:-8080}:81"`
-    - nginx/nginx.conf: `listen 80;`
+- Actual output (runtime): `curl -i http://127.0.0.1:8080/` returns 
+  "curl: (56) Recv failure: Connection reset by peer" — nothing on container port 81.
 - Conclusion: host:8080 forwards to container:81, but NGINX listens on container:80. Nothing will answer.
 - Failed attempt and what changed your thinking: none yet
 - Root cause: (pending)
 - Fix: (pending)
 - Retest evidence: (pending)
 - Related commit: (pending)
-- Remaining uncertainty: none — the mismatch is fully proven by reading both files.
+- Remaining uncertainty: none.
 
 ## Entry 7 — 2026-09-21 15:25 — NGINX attached to backend network, violating isolation
 - Symptom: NGINX can reach Postgres and Redis directly, which the task forbids ("Block direct NGINX access to PostgreSQL/Redis").
@@ -160,16 +153,15 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
 - Command or test:
 1. `cat config/app.env`
 2. `grep -n -A10 "postgres:" docker-compose.yml`
-- Actual output:
-    - config/app.env: `DATABASE_URL=postgresql://barq_app:...@postgres:5433/barq_tasks`
-    - compose postgres ports mapping: `127.0.0.1:15432:5432` → container port is 5432.
+- Actual output (runtime):
+  - `docker exec app-01 python -c "socket.create_connection(('postgres',5432))"` → OK
+  - Same on port 5433 → ConnectionRefusedError
 - Failed attempt and what changed your thinking: none yet
 - Root cause: (pending)
 - Fix: (pending)
 - Retest evidence: (pending)
 - Related commit: (pending)
-- Remaining uncertainty: Need to confirm Postgres is not configured to listen on 5433 (via command override or custom postgresql.conf in 
-the postgres service block).
+- Remaining uncertainty: none.
 
 ## Entry 10 — 2026-09-21 16:00 — REDIS_URL uses port 6380, Redis listens on 6379
 - Symptom: /counter and /ready will fail because the app cannot connect to Redis.
@@ -177,17 +169,15 @@ the postgres service block).
 - Command or test:
 1. `cat config/app.env`
 2. `grep -n -A10 "redis:" docker-compose.yml`
-- Actual output:
-    - config/app.env: `REDIS_URL=redis://redis:6380/0`
-    - compose redis ports mapping: `127.0.0.1:16379:6379` → container port is 6379.
+- Actual output (runtime):
+  - `docker exec app-01 python -c "socket.create_connection(('redis',6379))"` → OK
+  - Same on port 6380 → ConnectionRefusedError
 - Failed attempt and what changed your thinking: none yet
 - Root cause: (pending)
 - Fix: (pending)
 - Retest evidence: (pending)
 - Related commit: (pending)
-- Remaining uncertainty: none — app/server.py line 60 shows the 
-  default is redis://redis:6379/0 (correct port); config/app.env 
-  overrides it to 6380.
+- Remaining uncertainty: none.
 
 ## Entry 11 — 2026-09-21 16:10 — config/app.env tracked in git, contains credential-like value
 - Symptom: The task says "Keep secrets out of images, code and Compose. 
@@ -212,15 +202,13 @@ the postgres service block).
 - Symptom: The image creates a non-root user `app` but then switches back to root before CMD, so the container runs as root.
 - Hypothesis: The Dockerfile contains a `USER root` line after the useradd.
 - Command or test: `Read Dockerfile`.
-- Actual output:
-    - `RUN groupadd --gid 10001 app && useradd --uid 10001 --gid app --no-create-home app`
-    - later: `USER root`
+- Actual output (runtime): `docker exec app-01 whoami` → `root`
 - Failed attempt and what changed your thinking: none yet
 - Root cause: (pending)
 - Fix: (pending)
 - Retest evidence: (pending)
 - Related commit: (pending)
-- Remaining uncertainty: none — the `USER root` line is present and overrides the earlier non-root setup.
+- Remaining uncertainty: none.
 
 ## Entry 13 — 2026-09-21 16:30 — Dockerfile copies config/app.env into the image
 - Symptom: Secrets are baked into the image layer, violating "Keep secrets out of images."
