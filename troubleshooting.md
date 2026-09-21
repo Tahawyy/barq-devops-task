@@ -105,21 +105,39 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   reaching apps). Will be verified after Entries 2 and 6 are fixed.
 
 ## Entry 6 — 2026-09-21 15:18 — NGINX container port mismatch (host:8080 -> container:81 vs listen 80)
-- Symptom: Requests to `http://127.0.0.1:8080` will never reach NGINX because the container is not listening on the mapped container port.
-- Hypothesis: docker-compose publishes NGINX's port 81, but nginx/nginx.conf listens on 80.
+- Symptom: Requests to `http://127.0.0.1:8080` never reach NGINX because 
+  the container is not listening on the mapped container port. curl 
+  returns "Connection reset by peer".
+- Hypothesis: docker-compose publishes NGINX's port 81, but 
+  nginx/nginx.conf listens on 80.
 - Command or test:
-    1. Read nginx ports mapping in docker-compose.yml
-    2. Read listen server in nginx/nginx.conf
-- Actual output (runtime): `curl -i http://127.0.0.1:8080/` returns 
-  "curl: (56) Recv failure: Connection reset by peer" — nothing on container port 81.
-- Conclusion: host:8080 forwards to container:81, but NGINX listens on container:80. Nothing will answer.
-- Failed attempt and what changed your thinking: none yet
-- Root cause: (pending)
-- Fix: (pending)
-- Retest evidence: (pending)
-- Related commit: (pending)
-- Remaining uncertainty: none.
-
+  1. Read nginx ports mapping in docker-compose.yml
+  2. Read listen directive in nginx/nginx.conf
+  3. `curl -i http://127.0.0.1:8080/`
+  4. `docker compose -p barq-assessment ps -a nginx`
+- Actual output (before fix):
+  - docker-compose.yml line 63: `"127.0.0.1:${PUBLIC_PORT:-8080}:81"`
+  - nginx/nginx.conf: `listen 80;`
+  - `curl -i http://127.0.0.1:8080/` → `curl: (56) Recv failure: Connection reset by peer`
+  - `docker compose ps -a nginx` → `127.0.0.1:8080->81/tcp`
+- Failed attempt and what changed your thinking: none — the first 
+  hypothesis was correct on inspection.
+- Root cause: The compose port mapping forwarded host port 8080 to the 
+  nginx container's port 81, but nginx listens on container port 80. 
+  Nothing was listening on 81, so the TCP connection was accepted and 
+  immediately reset by the kernel.
+- Fix: Changed docker-compose.yml line 63 from `:81` to `:80`. Recreated 
+  only the nginx container with `docker compose -p barq-assessment up -d nginx`.
+- Retest evidence:
+  - `docker compose -p barq-assessment ps -a nginx` → `127.0.0.1:8080->80/tcp`
+  - `curl -i http://127.0.0.1:8080/` → `HTTP/1.1 502 Bad Gateway` 
+    (nginx/1.28.3). The error changed from connection reset (couldn't 
+    reach nginx) to 502 (nginx reachable but cannot reach apps), 
+    confirming Entry 6 is fixed and the next layer is Entries 2 and 5.
+- Related commit: (fill after commit)
+- Remaining uncertainty: none — fix verified. The 502 is expected and 
+  is addressed by Entries 2 and 5.
+  
 ## Entry 7 — 2026-09-21 15:25 — NGINX attached to backend network, violating isolation
 - Symptom: NGINX can reach Postgres and Redis directly, which the task forbids ("Block direct NGINX access to PostgreSQL/Redis").
 - Hypothesis: The nginx service declares both frontend and backend in its networks list.
