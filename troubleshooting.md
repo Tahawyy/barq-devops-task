@@ -47,7 +47,7 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
     through NGINX.
   - X-Instance-ID header alternates correspondingly.
   - This also proves NGINX round-robin is working across both backends.
-- Related commit: (fill after commit)
+- Related commit: 79e32cc
 - Remaining uncertainty: none.
 
 ## Entry 2 — 2026-09-21 14:52 — APP_HOST set to 127.0.0.1 makes apps unreachable from NGINX
