@@ -19,19 +19,36 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
 
 ## Entry 1 — 2026-09-21 14:50 — app-01 and app-02 share the same INSTANCE_ID
 - Symptom: Both app services are expected to return distinct identities, 
-  but the compose file sets the same value for both.
+  but the compose file sets the same value for both. /instance returned 
+  {"instance_id":"app-01"} for both backends.
 - Hypothesis: INSTANCE_ID is hardcoded to "app-01" in both app-01 and 
-    app-02 service definitions, instead of being overridden per service.
-- Command or test: `grep -n "INSTANCE_ID" docker-compose.yml`
-- Actual output:    53:      INSTANCE_ID: "app-01"
-                    59:      INSTANCE_ID: "app-01"
-- Failed attempt and what changed your thinking: none yet
-- Root cause: (pending)
-- Fix: (pending)
-- Retest evidence: (pending)
-- Related commit: (pending)
-- Remaining uncertainty: none — /instance on both apps returned 
-  {"instance_id":"app-01"} confirming the same value at runtime.
+  app-02 service definitions, instead of being overridden per service.
+- Command or test:
+  1. `grep -n "INSTANCE_ID" docker-compose.yml`
+  2. `docker exec app-01 python -c "... urlopen('http://127.0.0.1:8080/instance')"`
+  3. `docker exec app-02 python -c "... urlopen('http://127.0.0.1:8080/instance')"`
+- Actual output (before fix):
+  - docker-compose.yml line 53: `INSTANCE_ID: "app-01"`
+  - docker-compose.yml line 59: `INSTANCE_ID: "app-01"`
+  - Both /instance calls returned `{"instance_id":"app-01"}` — identical.
+- Failed attempt and what changed your thinking: none — the first 
+  hypothesis was confirmed by grep and at runtime.
+- Root cause: The app-02 service block in docker-compose.yml 
+  hardcoded INSTANCE_ID to "app-01" instead of "app-02". The x-app 
+  anchor does not set INSTANCE_ID, so app/server.py's default of 
+  "local" is never used — both services explicitly override to the 
+  same value.
+- Fix: Changed docker-compose.yml line 59 (app-02 service) from 
+  `INSTANCE_ID: "app-01"` to `INSTANCE_ID: "app-02"`. Recreated only 
+  app-02 with `docker compose -p barq-assessment up -d app-02`.
+- Retest evidence:
+  - `for i in 1..10; curl -s http://127.0.0.1:8080/instance` alternates 
+    cleanly between {"instance_id":"app-01"} and {"instance_id":"app-02"} 
+    through NGINX.
+  - X-Instance-ID header alternates correspondingly.
+  - This also proves NGINX round-robin is working across both backends.
+- Related commit: (fill after commit)
+- Remaining uncertainty: none.
 
 ## Entry 2 — 2026-09-21 14:52 — APP_HOST set to 127.0.0.1 makes apps unreachable from NGINX
 - Symptom: NGINX cannot reach the apps because the Flask app binds to 
