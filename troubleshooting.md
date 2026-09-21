@@ -211,10 +211,15 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   - `docker exec app-01 python -c "socket.create_connection(('postgres',5432))"` → OK
   - Same on port 5433 → ConnectionRefusedError
 - Failed attempt and what changed your thinking: none yet
-- Root cause: (pending)
-- Fix: (pending)
-- Retest evidence: (pending)
-- Related commit: (pending)
+- Root cause: config/app.env's DATABASE_URL pointed at postgres:5433, but 
+  the Postgres container listens on port 5432 (confirmed by the compose 
+  port mapping `127.0.0.1:15432:5432` and by psycopg connect tests).
+- Fix: Changed config/app.env DATABASE_URL from postgres:5433 to 
+  postgres:5432. Recreated app-01 and app-02.
+- Retest evidence:
+  - `docker exec app-01 python -c "socket.create_connection(('postgres',5432))"` → OK (before fix; this was the runtime confirmation)
+  - After fix + Entry 21: `curl /ready` reports `"postgres": "ready"`.
+- Related commit: (same as Entry 10 / 21)
 - Remaining uncertainty: none.
 
 ## Entry 10 — 2026-09-21 16:00 — REDIS_URL uses port 6380, Redis listens on 6379
@@ -227,10 +232,15 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   - `docker exec app-01 python -c "socket.create_connection(('redis',6379))"` → OK
   - Same on port 6380 → ConnectionRefusedError
 - Failed attempt and what changed your thinking: none yet
-- Root cause: (pending)
-- Fix: (pending)
-- Retest evidence: (pending)
-- Related commit: (pending)
+- Root cause: config/app.env's REDIS_URL pointed at redis:6380, but the 
+  Redis container listens on port 6379 (confirmed by the compose port 
+  mapping `127.0.0.1:16379:6379` and by socket connect tests).
+- Fix: Changed config/app.env REDIS_URL from redis:6380 to redis:6379. 
+  Recreated app-01 and app-02.
+- Retest evidence:
+  - `docker exec app-01 python -c "socket.create_connection(('redis',6379))"` → OK (before fix)
+  - After fix: `curl /counter` returns `{"counter":1}`; `/ready` reports `"redis": "ready"`.
+- Related commit: (same as Entry 9 / 21)
 - Remaining uncertainty: none.
 
 ## Entry 11 — 2026-09-21 16:10 — config/app.env tracked in git, contains credential-like value
@@ -415,3 +425,41 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
 - Retest evidence: (pending)
 - Related commit: (pending)
 - Remaining uncertainty: none.
+
+## Entry 21 — 2026-09-21 20:05 — Postgres password mismatch between config/app.env and docker-compose.yml
+- Symptom: After fixing Entry 9 (port 5433 -> 5432), /ready still reported 
+  `"postgres": "unavailable"` and /records returned `error: postgres_unavailable`. 
+  Redis worked (Entry 10), so the issue was Postgres-specific.
+- Hypothesis: The DATABASE_URL password in config/app.env did not match the 
+  POSTGRES_PASSWORD that initializes the Postgres container in docker-compose.yml.
+- Command or test:
+  1. `grep -E "POSTGRES_PASSWORD" docker-compose.yml`
+  2. `grep -E "DATABASE_URL" config/app.env`
+  3. Compare the password substrings.
+  4. Runtime test: `docker exec app-01 python -c "... psycopg.connect(DATABASE_URL) ..."` 
+     (or simply call /ready and inspect the error)
+- Actual output (before fix):
+  - docker-compose.yml: POSTGRES_PASSWORD: BarqLabOnly_7qN2vK8c
+  - config/app.env: DATABASE_URL=postgresql://barq_app:BarqLabOnly_7qN2vK8d@postgres:5432/barq_tasks
+  - The passwords differ in their last character: c vs d.
+  - /ready returned {"postgres": "unavailable", "redis": "ready"}.
+- Failed attempt and what changed your thinking: Initially assumed the port 
+  change (Entry 9) alone would fix /ready. After seeing redis: ready but 
+  postgres: unavailable, compared the two passwords character by character 
+  and found the mismatch.
+- Root cause: The Postgres container was initialized with POSTGRES_PASSWORD 
+  = BarqLabOnly_7qN2vK8c, but the app authenticates using the value embedded 
+  in config/app.env's DATABASE_URL, which ends in ...K8d. Password 
+  authentication therefore failed with no schema-level error visible from 
+  the app.
+- Fix: Changed the password inside config/app.env's DATABASE_URL from 
+  BarqLabOnly_7qN2vK8d to BarqLabOnly_7qN2vK8c so it matches compose. 
+  Recreated app-01 and app-02 with `docker compose -p barq-assessment up -d app-01 app-02`.
+  (Long-term fix belongs to Entries 11 and 18 — parameterize the password 
+  from a single source; tracked separately.)
+- Retest evidence:
+  - `curl -s http://127.0.0.1:8080/ready` → {"status":"ready", "dependencies": {"postgres":"ready","redis":"ready"}, ...}
+  - `curl -s http://127.0.0.1:8080/records` → returns the 2 seeded records
+  - `curl -i -X POST -H 'Content-Type: application/json' -d '{"title":"Persistence test"}' http://127.0.0.1:8080/records` → 201 CREATED, record id 3
+- Related commit: (fill after commit)
+- Remaining uncertainty: none — Postgres now authenticates and serves reads/writes.
