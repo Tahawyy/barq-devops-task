@@ -134,10 +134,10 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
     (nginx/1.28.3). The error changed from connection reset (couldn't 
     reach nginx) to 502 (nginx reachable but cannot reach apps), 
     confirming Entry 6 is fixed and the next layer is Entries 2 and 5.
-- Related commit: (fill after commit)
+- Related commit: cd2fc8f
 - Remaining uncertainty: none — fix verified. The 502 is expected and 
   is addressed by Entries 2 and 5.
-  
+
 ## Entry 7 — 2026-09-21 15:25 — NGINX attached to backend network, violating isolation
 - Symptom: NGINX can reach Postgres and Redis directly, which the task forbids ("Block direct NGINX access to PostgreSQL/Redis").
 - Hypothesis: The nginx service declares both frontend and backend in its networks list.
