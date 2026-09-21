@@ -97,15 +97,19 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   1. Read healthcheck block in docker-compose.yml (x-app anchor)
   2. `grep -n "health" app/server.py`
   3. `grep -n "app.get\|app.post\|app.route" app/server.py`
+  4. `docker compose -p barq-assessment logs app-01 | grep healthz`
 - Actual output (runtime):
   - `docker compose ps -a` shows app-01 and app-02 as `Up ... (unhealthy)`.
   - App route is /health (grep line 96), healthcheck calls /healthz.
+  - app-01 and app-02 logs show repeated `"GET /healthz HTTP/1.1" 404 -` 
+    every few seconds, directly proving the healthcheck is hitting a 
+    nonexistent endpoint.
 - Failed attempt and what changed your thinking: none yet
 - Root cause: (pending)
 - Fix: (pending)
 - Retest evidence: (pending)
 - Related commit: (pending)
-- Remaining uncertainty: none.
+- Remaining uncertainty: none — /healthz 404s are confirmed in app logs.
 
 ## Entry 5 — 2026-09-21 15:04 — NGINX upstream points app-01 to port 8081
 - Symptom: NGINX will return 502 for requests routed to app-01 because nothing is listening on port 8081.
