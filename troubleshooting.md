@@ -82,10 +82,17 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
 - Command or test: `grep -n "restart" docker-compose.yml`
 - Actual output: `restart: "no"` in the x-app anchor.
 - Failed attempt and what changed your thinking: none yet
-- Root cause: (pending)
-- Fix: (pending)
-- Retest evidence: (pending)
-- Related commit: (pending)
+- Root cause: The x-app anchor set restart: "no", so if an app process 
+  crashed, Docker would not restart the container. This violates the 
+  task requirement to set correct restart policies.
+- Fix: Changed restart from "no" to unless-stopped in the x-app anchor. 
+  Force-recreated all services with docker compose -p barq-assessment up -d --force-recreate.
+- Retest evidence:
+  - `docker inspect app-01 --format='{{.HostConfig.RestartPolicy.Name}}'` → unless-stopped
+  - `docker exec app-01 python -c "import os, signal; os.kill(1, signal.SIGTERM)"` 
+    (simulates an app crash) → 15s later `docker compose ps -a app-01` shows 
+    `Up 14 seconds (healthy)`. The container restarted automatically.
+- Related commit: (fill after commit)
 - Remaining uncertainty: none.
 
 ## Entry 4 — 2026-09-21 — healthcheck hits /healthz, but the app only exposes /health
@@ -105,11 +112,17 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
     every few seconds, directly proving the healthcheck is hitting a 
     nonexistent endpoint.
 - Failed attempt and what changed your thinking: none yet
-- Root cause: (pending)
-- Fix: (pending)
-- Retest evidence: (pending)
-- Related commit: (pending)
-- Remaining uncertainty: none — /healthz 404s are confirmed in app logs.
+- Root cause: docker-compose.yml's healthcheck called GET /healthz, 
+  but the Flask app only exposes GET /health. Every healthcheck attempt 
+  returned 404, so Docker permanently marked the app containers as unhealthy.
+- Fix: Changed the healthcheck test URL from /healthz to /health in the 
+  x-app anchor. Force-recreated the app containers.
+- Retest evidence:
+  - Before fix: `docker compose ps -a` showed app-01 and app-02 as `Up (unhealthy)`.
+  - After fix: `docker compose ps -a` shows app-01 and app-02 as `Up (healthy)`.
+  - App logs no longer show repeated `"GET /healthz HTTP/1.1" 404 -` entries.
+- Related commit: (same commit as Entries 3, 15, 20)
+- Remaining uncertainty: none.
 
 ## Entry 5 — 2026-09-21 15:04 — NGINX upstream points app-01 to port 8081
 - Symptom: NGINX will return 502 for requests routed to app-01 because nothing is listening on port 8081.
@@ -336,11 +349,20 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
     not exist — see Entry 4). So even the long-form condition would 
     fail until Entry 4 is fixed.
 - Failed attempt and what changed your thinking: none yet
-- Root cause: (pending)
-- Fix: (pending)
-- Retest evidence: (pending)
-- Related commit: (pending)
-- Remaining uncertainty: Need to confirm at runtime whether nginx actually returns 502s before apps are ready (short-lived race).
+- Root cause: nginx depended on app-01 and app-02 using the short 
+  depends_on: [app-01, app-02] syntax, which only waits for containers 
+  to start, not for their healthcheck to pass. In the initial broken 
+  state this led to transient 502s at startup.
+- Fix: Changed nginx's depends_on to long form with condition: service_healthy 
+  for both app-01 and app-02. Also added depends_on with condition: 
+  service_healthy to app-01 and app-02 so they wait for postgres and redis 
+  to be healthy before starting.
+- Retest evidence:
+  - After force-recreate of the whole stack, `docker compose ps -a` shows 
+    all five containers healthy, with nginx starting only after apps 
+    became healthy (no 502 startup window observed).
+- Related commit: (same commit as Entries 3, 4, 20)
+- Remaining uncertainty: none.
 
 ## Entry 16 — 2026-09-21 17:08 — Postgres named volume mounts wrong path
 - Symptom: The named volume postgres-data is attached, but Postgres 
@@ -439,10 +461,14 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   docker-compose.yml.
 - Actual output: No restart: line in any of the three blocks.
 - Failed attempt and what changed your thinking: none yet
-- Root cause: (pending)
-- Fix: (pending)
-- Retest evidence: (pending)
-- Related commit: (pending)
+- Root cause: nginx, postgres and redis services had no restart: line. 
+  If any of them crashed, they would remain down until manually started.
+- Fix: Added restart: unless-stopped to nginx, postgres and redis services.
+- Retest evidence:
+  - `docker inspect redis --format='{{.HostConfig.RestartPolicy.Name}}'` → unless-stopped
+  - `docker exec redis kill 1` (simulates crash) → 15s later 
+    `docker compose ps -a redis` shows `Up 14 seconds (healthy)`.
+- Related commit: (same commit as Entries 3, 4, 15)
 - Remaining uncertainty: none.
 
 ## Entry 21 — 2026-09-21 20:05 — Postgres password mismatch between config/app.env and docker-compose.yml
