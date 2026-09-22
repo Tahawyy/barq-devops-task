@@ -16,9 +16,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Verify Compose config syntax
-        run: docker compose -p barq-assessment config > /dev/null
-
       - name: Set up .env from example
         run: cp .env.example .env
 
@@ -28,6 +25,9 @@ jobs:
           DATABASE_URL=postgresql://barq_app:change-me-in-real-deployments@postgres:5432/barq_tasks
           REDIS_URL=redis://redis:6379/0
           EOF
+
+      - name: Verify Compose config syntax
+        run: docker compose -p barq-assessment config > /dev/null
 
       - name: Build images
         run: docker compose -p barq-assessment build
