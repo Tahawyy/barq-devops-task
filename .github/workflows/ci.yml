@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Build, start, and validate the stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Compose config syntax
+        run: docker compose -p barq-assessment config > /dev/null
+
+      - name: Set up .env from example
+        run: cp .env.example .env
+
+      - name: Create config/app.env for CI
+        run: |
+          cat > config/app.env <<EOF
+          DATABASE_URL=postgresql://barq_app:change-me-in-real-deployments@postgres:5432/barq_tasks
+          REDIS_URL=redis://redis:6379/0
+          EOF
+
+      - name: Build images
+        run: docker compose -p barq-assessment build
+
+      - name: Start the stack
+        run: docker compose -p barq-assessment up -d
+
+      - name: Wait for readiness (bounded)
+        run: |
+          echo "Waiting up to 60s for the stack to be ready..."
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8080/health > /dev/null; then
+              echo "Stack responded after $((i*2))s"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Stack did not become ready within 60s"
+          docker compose -p barq-assessment ps -a
+          docker compose -p barq-assessment logs --no-color
+          exit 1
+
+      - name: Show container status
+        run: docker compose -p barq-assessment ps -a
+
+      - name: Run validate.py
+        run: python3 validate.py
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          echo "=== docker compose ps -a ==="
+          docker compose -p barq-assessment ps -a
+          echo "=== docker compose logs ==="
+          docker compose -p barq-assessment logs --no-color
+
+      - name: Shut down
+        if: always()
+        run: docker compose -p barq-assessment down
