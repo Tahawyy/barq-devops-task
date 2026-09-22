@@ -206,7 +206,7 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
     → `app-01 app-02 postgres redis` (no nginx)
   - End-to-end still works: `curl http://127.0.0.1:8080/` returns 200 through 
     nginx -> apps on the frontend network.
-- Related commit: (fill after commit)
+- Related commit: b264945
 - Remaining uncertainty: none — network layout verified.
 
 ## Entry 8 — 2026-09-21 15:40 — Postgres and Redis publish ports to the host
@@ -231,7 +231,7 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   - `nc -zv 127.0.0.1 16379` → Connection refused
   - `/ready` still reports both dependencies as "ready" (apps reach 
     Postgres/Redis internally via the backend network).
-- Related commit: (fill after commit)
+- Related commit: b264945
 - Remaining uncertainty: none.
 
 ## Entry 9 — 2026-09-21 15:50— DATABASE_URL uses port 5433, Postgres listens on 5432
@@ -309,7 +309,7 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
 - Retest evidence:
   - `docker exec app-01 whoami` → `app` (no longer root).
   - `docker compose -p barq-assessment ps -a` still shows both apps healthy.
-- Related commit: (same commit as Entries 7 and 8)
+- Related commit: b264945
 - Remaining uncertainty: none.
 
 ## Entry 13 — 2026-09-21 16:30 — Dockerfile copies config/app.env into the image
