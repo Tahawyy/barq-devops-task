@@ -296,7 +296,7 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   - `git check-ignore config/app.env` → ignored
   - No tracked file contains the real password 
     (verified with `git ls-files | while read f; do grep -l ... "$f"; done`).
-- Related commit: (fill after commit)
+- Related commit: 094b9c4
 - Remaining uncertainty: The password remains in earlier commits (starter 
   baseline). It is a synthetic lab value for a disposable environment; 
   documented in security_review.md.
@@ -338,7 +338,7 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   - `docker run --rm barq-assessment-app-01 ls /srv` → only `app` and 
     `requirements.txt`, no `app.env`.
   - App still works: /ready reports both deps ready.
-- Related commit: (same commit as 11, 14, 18)
+- Related commit: 094b9c4
 - Remaining uncertainty: none.
 
 ## Entry 14 — 2026-09-21 16:50 — .env.example is incomplete
@@ -363,7 +363,7 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
 - Fix: Expanded with all keys (POSTGRES_*, APP_*, DATABASE_URL, REDIS_URL) 
   using placeholder values.
 - Retest evidence: `cat .env.example` shows full key set with safe values.
-- Related commit: (same commit as 11, 13, 18)
+- Related commit: 094b9c4
 - Remaining uncertainty: none.
 
 ## Entry 15 — 2026-09-21 17:00 — depends_on uses short syntax, no service_healthy gating
@@ -460,7 +460,7 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   - docker compose config shows the value resolved from .env.
   - /ready reports postgres ready.
   - No tracked file contains the real password.
-- Related commit: (same commit as 11, 13, 14)
+- Related commit: 094b9c4
 - Remaining uncertainty: none.
 
 
