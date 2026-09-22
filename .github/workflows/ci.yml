@@ -21,6 +21,7 @@ jobs:
 
       - name: Create config/app.env for CI
         run: |
+          mkdir -p config
           cat > config/app.env <<EOF
           DATABASE_URL=postgresql://barq_app:change-me-in-real-deployments@postgres:5432/barq_tasks
           REDIS_URL=redis://redis:6379/0
