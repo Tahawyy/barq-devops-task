@@ -92,7 +92,7 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   - `docker exec app-01 python -c "import os, signal; os.kill(1, signal.SIGTERM)"` 
     (simulates an app crash) → 15s later `docker compose ps -a app-01` shows 
     `Up 14 seconds (healthy)`. The container restarted automatically.
-- Related commit: (fill after commit)
+- Related commit: 98bd203
 - Remaining uncertainty: none.
 
 ## Entry 4 — 2026-09-21 — healthcheck hits /healthz, but the app only exposes /health
@@ -121,7 +121,7 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   - Before fix: `docker compose ps -a` showed app-01 and app-02 as `Up (unhealthy)`.
   - After fix: `docker compose ps -a` shows app-01 and app-02 as `Up (healthy)`.
   - App logs no longer show repeated `"GET /healthz HTTP/1.1" 404 -` entries.
-- Related commit: (same commit as Entries 3, 15, 20)
+- Related commit: 98bd203
 - Remaining uncertainty: none.
 
 ## Entry 5 — 2026-09-21 15:04 — NGINX upstream points app-01 to port 8081
@@ -361,7 +361,7 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   - After force-recreate of the whole stack, `docker compose ps -a` shows 
     all five containers healthy, with nginx starting only after apps 
     became healthy (no 502 startup window observed).
-- Related commit: (same commit as Entries 3, 4, 20)
+- Related commit: 98bd203
 - Remaining uncertainty: none.
 
 ## Entry 16 — 2026-09-21 17:08 — Postgres named volume mounts wrong path
@@ -468,7 +468,7 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   - `docker inspect redis --format='{{.HostConfig.RestartPolicy.Name}}'` → unless-stopped
   - `docker exec redis kill 1` (simulates crash) → 15s later 
     `docker compose ps -a redis` shows `Up 14 seconds (healthy)`.
-- Related commit: (same commit as Entries 3, 4, 15)
+- Related commit: 98bd203
 - Remaining uncertainty: none.
 
 ## Entry 21 — 2026-09-21 20:05 — Postgres password mismatch between config/app.env and docker-compose.yml
