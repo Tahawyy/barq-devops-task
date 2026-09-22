@@ -286,14 +286,20 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
 - Command or test: `git ls-files config/app.env`
 - Actual output: `config/app.env`
 - Failed attempt and what changed your thinking: none yet
-- Root cause: (pending)
-- Fix: (pending)
-- Retest evidence: (pending)
-- Related commit: (pending)
-- Remaining uncertainty: Removing this file may break the starter; may 
-    need to keep it while adding it to .gitignore for future commits and 
-    documenting the trade-off in security_review.md. Also need to check 
-    whether the value is truly sensitive or a lab placeholder.
+- Root cause: config/app.env was committed to the repository and contained 
+  the Postgres password inside DATABASE_URL.
+- Fix: Added .env and config/app.env to .gitignore. Ran 
+  `git rm --cached config/app.env` to stop tracking while keeping the file 
+  locally. Redacted the password from troubleshooting.md.
+- Retest evidence:
+  - `git check-ignore .env` → ignored
+  - `git check-ignore config/app.env` → ignored
+  - No tracked file contains the real password 
+    (verified with `git ls-files | while read f; do grep -l ... "$f"; done`).
+- Related commit: (fill after commit)
+- Remaining uncertainty: The password remains in earlier commits (starter 
+  baseline). It is a synthetic lab value for a disposable environment; 
+  documented in security_review.md.
 
 ## Entry 12 — 2026-09-21 16:18 — Dockerfile switches to USER root, defeating non-root setup
 - Symptom: The image creates a non-root user `app` but then switches back to root before CMD, so the container runs as root.
@@ -325,13 +331,15 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   - Conclusion: the app never opens /srv/app.env. The COPY line is 
     unnecessary and bakes an env file into the image layer.
 - Failed attempt and what changed your thinking: none yet
-- Root cause: (pending)
-- Fix: (pending)
-- Retest evidence: (pending)
-- Related commit: (pending)
-- Remaining uncertainty: none — grep of app/server.py shows the app 
-  reads env vars only via os.getenv(); it does not open /srv/app.env. 
-  The COPY line is unused and can be safely removed.
+- Root cause: Dockerfile contained `COPY config/app.env /srv/app.env`, 
+  baking the env file (with the password) into the image.
+- Fix: Removed the COPY line. Rebuilt the app images.
+- Retest evidence:
+  - `docker run --rm barq-assessment-app-01 ls /srv` → only `app` and 
+    `requirements.txt`, no `app.env`.
+  - App still works: /ready reports both deps ready.
+- Related commit: (same commit as 11, 14, 18)
+- Remaining uncertainty: none.
 
 ## Entry 14 — 2026-09-21 16:50 — .env.example is incomplete
 - Symptom: .env.example only documents PUBLIC_PORT; the app also needs 
@@ -351,11 +359,12 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   - Conclusion: .env.example should document all app-required vars 
     (with safe placeholder values), not only PUBLIC_PORT.
 - Failed attempt and what changed your thinking: none yet
-- Root cause: (pending)
-- Fix: (pending)
-- Retest evidence: (pending)
-- Related commit: (pending)
-- Remaining uncertainty: none — the missing variables are all enumerated by grepping app/server.py.
+- Root cause: .env.example contained only PUBLIC_PORT.
+- Fix: Expanded with all keys (POSTGRES_*, APP_*, DATABASE_URL, REDIS_URL) 
+  using placeholder values.
+- Retest evidence: `cat .env.example` shows full key set with safe values.
+- Related commit: (same commit as 11, 13, 18)
+- Remaining uncertainty: none.
 
 ## Entry 15 — 2026-09-21 17:00 — depends_on uses short syntax, no service_healthy gating
 - Symptom: nginx starts as soon as the app containers exist, not when 
@@ -442,15 +451,17 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   violating "Keep secrets out of images, code and Compose."
 - Hypothesis: The postgres service sets POSTGRES_PASSWORD inline.
 - Command or test: Read postgres service block in docker-compose.yml.
-- Actual output: `POSTGRES_PASSWORD: BarqLabOnly_7qN2vK8c`
+- Actual output: `POSTGRES_PASSWORD: BarqLabOnly_REDACTED`
 - Failed attempt and what changed your thinking: none yet
-- Root cause: (pending)
-- Fix: (pending)
-- Retest evidence: (pending)
-- Related commit: (pending)
-- Remaining uncertainty: Need to confirm whether the same password also 
-  appears in config/app.env (it does, inside DATABASE_URL). Both must 
-  come from an environment variable instead.
+- Root cause: POSTGRES_PASSWORD was hardcoded in docker-compose.yml.
+- Fix: Changed to ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}, 
+  with the actual value in .env (gitignored).
+- Retest evidence:
+  - docker compose config shows the value resolved from .env.
+  - /ready reports postgres ready.
+  - No tracked file contains the real password.
+- Related commit: (same commit as 11, 13, 14)
+- Remaining uncertainty: none.
 
 
 ## Entry 19 — 2026-09-21 17:30 — Redis persistence disabled and no volume
@@ -509,8 +520,8 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   4. Runtime test: `docker exec app-01 python -c "... psycopg.connect(DATABASE_URL) ..."` 
      (or simply call /ready and inspect the error)
 - Actual output (before fix):
-  - docker-compose.yml: POSTGRES_PASSWORD: BarqLabOnly_7qN2vK8c
-  - config/app.env: DATABASE_URL=postgresql://barq_app:BarqLabOnly_7qN2vK8d@postgres:5432/barq_tasks
+  - docker-compose.yml: POSTGRES_PASSWORD: BarqLabOnly_REDACTED
+  - config/app.env: DATABASE_URL=postgresql://barq_app:BarqLabOnly_REDACTED@postgres:5432/barq_tasks
   - The passwords differ in their last character: c vs d.
   - /ready returned {"postgres": "unavailable", "redis": "ready"}.
 - Failed attempt and what changed your thinking: Initially assumed the port 
@@ -518,12 +529,12 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   postgres: unavailable, compared the two passwords character by character 
   and found the mismatch.
 - Root cause: The Postgres container was initialized with POSTGRES_PASSWORD 
-  = BarqLabOnly_7qN2vK8c, but the app authenticates using the value embedded 
+  = BarqLabOnly_REDACTED, but the app authenticates using the value embedded 
   in config/app.env's DATABASE_URL, which ends in ...K8d. Password 
   authentication therefore failed with no schema-level error visible from 
   the app.
 - Fix: Changed the password inside config/app.env's DATABASE_URL from 
-  BarqLabOnly_7qN2vK8d to BarqLabOnly_7qN2vK8c so it matches compose. 
+  BarqLabOnly_REDACTED to BarqLabOnly_REDACTED so it matches compose. 
   Recreated app-01 and app-02 with `docker compose -p barq-assessment up -d app-01 app-02`.
   (Long-term fix belongs to Entries 11 and 18 — parameterize the password 
   from a single source; tracked separately.)
