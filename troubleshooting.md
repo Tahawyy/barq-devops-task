@@ -544,3 +544,41 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
   - `curl -i -X POST -H 'Content-Type: application/json' -d '{"title":"Persistence test"}' http://127.0.0.1:8080/records` → 201 CREATED, record id 3
 - Related commit: e5784d6
 - Remaining uncertainty: none — Postgres now authenticates and serves reads/writes.
+
+## Entry 22 — 2026-09-22 22:41 — Restore failed: "relation already exists"
+- Symptom: Running ./restore.sh against a backup failed with 
+  "relation 'records' already exists", "duplicate key value violates 
+  unique constraint", and "multiple primary keys not allowed". The 
+  deleted record did not come back.
+- Hypothesis: pg_dump without --clean assumes the target database is 
+  empty. Restoring into a populated database causes every CREATE / 
+  ALTER / COPY statement to fail.
+- Command or test:
+  1. `./backup.sh` (initial version, plain pg_dump)
+  2. Delete a record with psql
+  3. `./restore.sh ./backups/barq_<timestamp>.sql`
+- Actual output (failed restore):
+    -ERROR: relation "records" already exists
+    -ERROR: relation "records_id_seq" already exists
+    -ERROR: duplicate key value violates unique constraint "records_pkey"
+    -ERROR: multiple primary keys for table "records" are not allowed
+    -[restore] OK — records table has 4 rows. ← but the deleted record was not back
+- Failed attempt and what changed your thinking: The first restore 
+silently failed — the script still reported "OK" because the count 
+matched, but the deleted row was not actually restored. Realised the 
+dump needs DROP statements to be restorable into a non-empty database.
+- Root cause: pg_dump without --clean produces a dump designed for an 
+empty target. It contains CREATE TABLE / ALTER TABLE / COPY but no 
+DROP TABLE. When the target already has those objects, every 
+statement fails and the data is not restored.
+- Fix: Added `--clean --if-exists` to the pg_dump call in backup.sh. 
+Regenerated the backup.
+- Retest evidence:
+- Backup: `./backup.sh` → 86-line dump file
+- Delete: removed record id 4 → records = [1, 2, 3]
+- Restore output now shows `DROP TABLE` → `CREATE TABLE` → `COPY 4`
+  with no errors.
+- After restore: records = [1, 2, 3, 4] — the deleted record returned.
+- Related commit: (fill after commit)
+- Remaining uncertainty: none — the pattern is standard for 
+non-empty restores.
