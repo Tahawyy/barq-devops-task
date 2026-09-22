@@ -193,12 +193,21 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
 - Command or test: Read nginx service block in docker-compose.yml.
 - Actual output: nginx service lists `networks: [frontend, backend]`.
 - Failed attempt and what changed your thinking: none yet
-- Root cause: (pending)
-- Fix: (pending)
-- Retest evidence: (pending)
-- Related commit: (pending)
-- Remaining uncertainty: Need to confirm at runtime that removing 
-    backend does not break NGINX's ability to route to apps (apps are on frontend too, so it should be fine).
+- Root cause: The nginx service in docker-compose.yml listed both frontend 
+  and backend in its networks array. That gave nginx a route to Postgres 
+  and Redis, violating the task's isolation requirement ("Block direct NGINX 
+  access to PostgreSQL/Redis").
+- Fix: Changed nginx's networks to [frontend] only. Force-recreated the 
+  nginx container with `docker compose -p barq-assessment up -d --force-recreate nginx`.
+- Retest evidence:
+  - `docker network inspect barq-assessment_frontend --format='{{range .Containers}}{{.Name}} {{end}}'`
+    → `app-01 app-02 nginx`
+  - `docker network inspect barq-assessment_backend --format='{{range .Containers}}{{.Name}} {{end}}'`
+    → `app-01 app-02 postgres redis` (no nginx)
+  - End-to-end still works: `curl http://127.0.0.1:8080/` returns 200 through 
+    nginx -> apps on the frontend network.
+- Related commit: (fill after commit)
+- Remaining uncertainty: none — network layout verified.
 
 ## Entry 8 — 2026-09-21 15:40 — Postgres and Redis publish ports to the host
 - Symptom: Postgres and Redis are reachable from the host, which the task forbids ("Publish only NGINX on host port 8080").
@@ -208,11 +217,22 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
     - redis: `["127.0.0.1:16379:6379"]`
     - postgres: `["127.0.0.1:15432:5432"]`
 - Failed attempt and what changed your thinking: none yet
-- Root cause: (pending)
-- Fix: (pending)
-- Retest evidence: (pending)
-- Related commit: (pending)
-- Remaining uncertainty: none — the ports mappings are present and violate the stated rule.
+- Root cause: The postgres service published 127.0.0.1:15432:5432 and the 
+  redis service published 127.0.0.1:16379:6379. The task requires only 
+  NGINX to publish a host port, so both violated the rule.
+- Fix: Removed the `ports:` mappings from the postgres and redis services 
+  in docker-compose.yml. (This was applied alongside the persistence fix 
+  in Entries 16, 17, 19 where the postgres/redis blocks were already 
+  being edited.) Force-recreated both containers.
+- Retest evidence:
+  - `docker compose -p barq-assessment ps -a` shows `postgres 5432/tcp` 
+    and `redis 6379/tcp` — container ports only, no host mapping.
+  - `nc -zv 127.0.0.1 15432` → Connection refused
+  - `nc -zv 127.0.0.1 16379` → Connection refused
+  - `/ready` still reports both dependencies as "ready" (apps reach 
+    Postgres/Redis internally via the backend network).
+- Related commit: (fill after commit)
+- Remaining uncertainty: none.
 
 ## Entry 9 — 2026-09-21 15:50— DATABASE_URL uses port 5433, Postgres listens on 5432
 - Symptom: /ready and /records will fail because the app cannot connect to Postgres.
@@ -281,10 +301,15 @@ Do not fabricate a failed attempt just to fill the template. Record actual attem
 - Command or test: `Read Dockerfile`.
 - Actual output (runtime): `docker exec app-01 whoami` → `root`
 - Failed attempt and what changed your thinking: none yet
-- Root cause: (pending)
-- Fix: (pending)
-- Retest evidence: (pending)
-- Related commit: (pending)
+- Root cause: The Dockerfile created a non-root `app` user with useradd, 
+  but then contained the line `USER root`, which overrode the non-root 
+  setting. Containers therefore ran as root.
+- Fix: Changed the line from `USER root` to `USER app` in the Dockerfile. 
+  Rebuilt the app images with `docker compose -p barq-assessment up -d --build --force-recreate app-01 app-02`.
+- Retest evidence:
+  - `docker exec app-01 whoami` → `app` (no longer root).
+  - `docker compose -p barq-assessment ps -a` still shows both apps healthy.
+- Related commit: (same commit as Entries 7 and 8)
 - Remaining uncertainty: none.
 
 ## Entry 13 — 2026-09-21 16:30 — Dockerfile copies config/app.env into the image
