@@ -5,7 +5,7 @@ for the BARQ DevOps internship task. This README documents how to build,
 start, test, back up, restore, and clean up the environment.
 
 - Two Flask instances (app-01, app-02) behind NGINX
-- Only NGINX publishes a host port (default 8080)
+- Only NGINX publishes a host port (default 8090)
 - PostgreSQL and Redis are on a private backend network
 - NGINX is on the frontend network only
 - Postgres and Redis persist via named Docker volumes
@@ -18,7 +18,7 @@ start, test, back up, restore, and clean up the environment.
 - Linux or WSL2 with Docker and Docker Compose
 - Python 3.10+ (used by scripts and validator)
 - Docker Desktop must be set to Linux containers
-- Port 8080 free on the host
+- Port 8090 free on the host
 
 ---
 
@@ -65,19 +65,19 @@ app-02 show (healthy).
 
 ## Test the endpoints
 
-    curl -i http://127.0.0.1:8080/
-    curl -i http://127.0.0.1:8080/health
-    curl -i http://127.0.0.1:8080/ready
-    curl -i http://127.0.0.1:8080/instance
-    curl    http://127.0.0.1:8080/counter
+    curl -i http://127.0.0.1:8090/
+    curl -i http://127.0.0.1:8090/health
+    curl -i http://127.0.0.1:8090/ready
+    curl -i http://127.0.0.1:8090/instance
+    curl    http://127.0.0.1:8090/counter
     curl -H 'Content-Type: application/json' \
          -d '{"title":"README proof"}' \
-         http://127.0.0.1:8080/records
-    curl    http://127.0.0.1:8080/records
+         http://127.0.0.1:8090/records
+    curl    http://127.0.0.1:8090/records
 
 Repeat /instance several times to see both backends respond:
 
-    for i in $(seq 1 8); do curl -s http://127.0.0.1:8080/instance; echo; done
+    for i in $(seq 1 8); do curl -s http://127.0.0.1:8090/instance; echo; done
 
 ---
 
@@ -125,7 +125,7 @@ Restores a dump produced by backup.sh:
 Prove restore works end to end:
 
     # 1. Note current records
-    curl -s http://127.0.0.1:8080/records
+    curl -s http://127.0.0.1:8090/records
 
     # 2. Create a fresh backup
     ./backup.sh
@@ -135,13 +135,13 @@ Prove restore works end to end:
       -c "DELETE FROM records WHERE id = (SELECT MAX(id) FROM records);"
 
     # 4. Confirm it is gone
-    curl -s http://127.0.0.1:8080/records
+    curl -s http://127.0.0.1:8090/records
 
     # 5. Restore
     ./restore.sh ./backups/barq_<timestamp>.sql
 
     # 6. Confirm it is back
-    curl -s http://127.0.0.1:8080/records
+    curl -s http://127.0.0.1:8090/records
 
 ---
 
@@ -153,17 +153,17 @@ recreation:
     # Create a record and bump the counter
     curl -H 'Content-Type: application/json' \
          -d '{"title":"Persist me"}' \
-         http://127.0.0.1:8080/records
-    curl http://127.0.0.1:8080/counter
-    curl http://127.0.0.1:8080/counter
+         http://127.0.0.1:8090/records
+    curl http://127.0.0.1:8090/counter
+    curl http://127.0.0.1:8090/counter
 
     # Force-recreate the stateful containers (volumes are preserved)
     docker compose -p barq-assessment up -d --force-recreate postgres redis
     sleep 10
 
     # Confirm records and counter survived
-    curl http://127.0.0.1:8080/records
-    curl http://127.0.0.1:8080/counter
+    curl http://127.0.0.1:8090/records
+    curl http://127.0.0.1:8090/counter
 
 The record is still present and the counter has not reset.
 
@@ -221,10 +221,11 @@ Request flow:
   client
     |
     v
-  nginx (frontend network, host port 8080 -> container port 80)
+  nginx (frontend network, host port 8090 -> container port 80)
     |
     +--> app-01:8080
     +--> app-02:8080
+    +--> app-03:8080
              |
              v
         backend network
@@ -240,7 +241,7 @@ Networks:
 
 Ports:
 
-  Host 8080 -> nginx:80   (only published host port)
+  Host 8090 -> nginx:80   (only published host port)
   app-01, app-02, postgres, redis publish no host ports.
 
 Storage:
@@ -300,7 +301,7 @@ How do requests flow?
   network -> Postgres and Redis. Only NGINX is reachable from the host.
 
 Why these ports, networks, and readiness checks?
-  Port 8080 is the only public entry point. Frontend/backend split gives
+  Port 8090 is the only public entry point. Frontend/backend split gives
   isolation: compromising NGINX does not reach the data tier. /ready
   checks real dependencies so traffic only routes to instances that can
   serve it.

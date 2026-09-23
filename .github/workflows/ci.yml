@@ -38,9 +38,14 @@ jobs:
 
       - name: Wait for readiness (bounded)
         run: |
-          echo "Waiting up to 60s for the stack to be ready..."
+          PORT=$(grep '^PUBLIC_PORT=' .env | cut -d= -f2)
+          if [ -z "$PORT" ]; then
+            echo "ERROR: PUBLIC_PORT not found in .env"
+            exit 1
+          fi
+          echo "Waiting up to 60s for the stack on port $PORT..."
           for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:8080/health > /dev/null; then
+            if curl -sf "http://127.0.0.1:${PORT}/health" > /dev/null; then
               echo "Stack responded after $((i*2))s"
               exit 0
             fi
