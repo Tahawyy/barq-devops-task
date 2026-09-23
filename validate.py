@@ -20,7 +20,7 @@ import urllib.error
 import json
 import time
 
-BASE_URL = "http://127.0.0.1:8080"
+BASE_URL = "http://127.0.0.1:8090"
 
 def wait_for_stack(max_seconds=60):
     """Wait up to max_seconds for the stack to respond at all."""
